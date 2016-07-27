@@ -1,0 +1,8 @@
+* Programming Languages
+
+| week | lang | status | score   | date       |
+|------+------+--------+---------+------------|
+|    0 | SML  | TODO   | 100/100 | 2016/07/24 |
+|      |      |        |         |            |
+
+
