@@ -1,8 +1,7 @@
-* Programming Languages
+#+TITLE: Programming Languages
 
-| week | lang | status | score   | date       |
-|------+------+--------+---------+------------|
-|    0 | SML  | TODO   | 100/100 | 2016/07/24 |
-|      |      |        |         |            |
-
-
+| Section | Lang | Status | Score   | Point | Date             |
+|---------+------+--------+---------+-------+------------------|
+|       0 | SML  | PASS   | 100/100 |       | [2016-07-24 Sun] |
+|       1 | SML  | PAWC   | 100/100 | 55/55 | [2016-08-01 Mon] |
+|         |      |        |         |       |                  |
