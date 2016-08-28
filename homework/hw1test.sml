@@ -26,7 +26,7 @@ val test10 = month_range (31, 34) = [1,2,2,2]
 
 val test11 = oldest([(2012,2,28),(2011,3,31),(2011,4,28)]) = SOME (2011,3,31)
 
-                                                                  
+
 (* my challenge problems tests *)
 
 val test12_0 = remove_duplicates([2,4,2,1,2,5,7,3,5,7,9,7,8,6,4,7,2,4,2,5,0])
@@ -34,11 +34,11 @@ val test12_0 = remove_duplicates([2,4,2,1,2,5,7,3,5,7,9,7,8,6,4,7,2,4,2,5,0])
 
 val test12_1 = number_in_months_challenge([(2012,2,28),(2013,12,1),(2011,3,31)
                                            ,(2011,4,28)],[2,3,4,2,3])
-               = 3  
-                                       
+               = 3
+
 val test12_2 = dates_in_months_challenge([(2012,2,28),(2013,12,1),(2011,3,31)
                                           ,(2011,4,28)],[2,3,4,2,3])
-               = [(2012,2,28),(2011,3,31),(2011,4,28)] 
+               = [(2012,2,28),(2011,3,31),(2011,4,28)]
 
 val test13 = not (reasonable_date((0,2,28))) andalso
              not (reasonable_date((2016,13,28))) andalso

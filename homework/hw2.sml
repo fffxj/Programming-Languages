@@ -4,10 +4,10 @@
    string), then you avoid several of the functions in problem 1 having
    polymorphic types that may be confusing *)
 fun same_string(s1 : string, s2 : string) =
-    s1 = s2
+  s1 = s2
 
 (* put your solutions for problem 1 here *)
-             
+
 (* 1-a *)
 fun all_except_option (str, strs) =
   let
@@ -23,7 +23,7 @@ fun all_except_option (str, strs) =
       then NONE
       else SOME filtered_strs
   end
-  
+
 
 (* 1-b *)
 fun get_substitutions1 (substitutions, str) =
@@ -46,10 +46,10 @@ fun get_substitutions2 (substitutions, str) =
       aux(substitutions, [])
   end
 
-      
+
 (* 1-d *)
 fun similar_names (substitutions, name) =
-  let 
+  let
       val {first=fst, middle=mid, last=lst} = name
       val similar_first_names = get_substitutions2(substitutions, fst)
       fun generate_names (first_names) =
@@ -60,15 +60,15 @@ fun similar_names (substitutions, name) =
       name :: generate_names(similar_first_names)
   end
 
-      
+
 (* you may assume that Num is always used with values 2, 3, ..., 10
    though it will not really come up *)
 datatype suit = Clubs | Diamonds | Hearts | Spades
-datatype rank = Jack | Queen | King | Ace | Num of int 
+datatype rank = Jack | Queen | King | Ace | Num of int
 type card = suit * rank
 
 datatype color = Red | Black
-datatype move = Discard of card | Draw 
+datatype move = Discard of card | Draw
 
 exception IllegalMove
 
@@ -76,8 +76,8 @@ exception IllegalMove
 
 fun same_card(c1 : card, c2 : card) =
   c1 = c2
-           
-(* 2-a *)              
+
+(* 2-a *)
 fun card_color (s, r) =
   case s of
       Clubs => Black
@@ -105,14 +105,14 @@ fun remove_card (cs, c, e) =
                 else x :: remove_card(xs', c, e)
 
 
-(* 2-d *)                                     
+(* 2-d *)
 fun all_same_color (cs) =
   case cs of
       [] => true
     | _::[] => true
     | x::y::tl => card_color(x) = card_color(y) andalso all_same_color(y::tl)
 
-                                                                      
+
 (* 2-e *)
 fun sum_cards (cs) =
   let fun aux (xs, acc) =
@@ -122,11 +122,11 @@ fun sum_cards (cs) =
   in
       aux(cs, 0)
   end
-      
+
 
 (* 2-f *)
 fun score (hcs, goal) =
-  let 
+  let
       val sum = sum_cards(hcs)
       val preliminary_score = if sum > goal then 3 * (sum - goal) else goal - sum
   in
@@ -138,12 +138,12 @@ fun score (hcs, goal) =
 
 (* 2-g *)
 fun officiate (cards, moves, goal) =
-  let 
+  let
       fun aux(card_list, move_list, hold_list) =
         case move_list of
             [] => score(hold_list, goal)
           | (Discard c)::tl
-            => aux(card_list, tl, remove_card(card_list, c, IllegalMove)) 
+            => aux(card_list, tl, remove_card(card_list, c, IllegalMove))
           | Draw::tl => case card_list of
                             [] => score(hold_list, goal)
                           | x::xs' => if sum_cards(x::hold_list) > goal
@@ -151,4 +151,4 @@ fun officiate (cards, moves, goal) =
                                       else aux(xs', tl, x::hold_list)
   in
       aux(cards, moves, [])
-  end      
+  end
