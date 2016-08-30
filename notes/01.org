@@ -1203,7 +1203,7 @@ each =xi= to =vi= for evaluating the corresponding =ei=.
 ** Type Synonyms
 
 Before continuing our discussion of datatypes, let’s contrast them with another
-useful kind of binding that also introduces a new type name. A/ type synonym/
+useful kind of binding that also introduces a new type name. A /type synonym/
 simply creates another name for an existing type that is entirely
 interchangeable with the existing type.
 
@@ -2006,6 +2006,1067 @@ of expression; here are several parts:
 
 + ...
 
+* Section 3: First-Class Functions and Closures
+** Introduction and Some Terms
+
+This unit focuses on /first-class functions/ and /function closures/. By
+“first-class” we mean that functions can be computed, passed, stored, etc.
+wherever other values can be computed, passed, stored, etc. As examples, we can
+pass them to functions, return them from functions, put them in pairs, have
+them be part of the data a datatype constructor carries, etc. “Function
+closures” refers to functions that use variables defined outside of them, which
+makes first-class functions much more powerful, as we will see after starting
+with simpler first-class functions that do not use this ability. The term
+/higher-order function/ just refers to a function that takes or returns other
+functions.
+
+Terms like first-class functions, function closures, and higher-order functions
+are often confused with each other or considered synonyms. Because so much of
+the world is not careful with these terms, we will not be too worried about
+them either. But the idea of first-class functions and the idea of function
+closures really are distinct concepts that we often use together to write
+elegant, reusable code. For that reason, we will delay the idea of closures, so
+we can introduce it as a separate concept.
+
+
+There is an even more general term, functional programming. This term also is
+often used imprecisely to refer to several distinct concepts. The two most
+important and most common are:
+
++ Not using mutable data in most or all cases: We have avoided mutation
+  throughout the course so far and will mostly continue to do so.
+
++ Using functions as values, which is what this unit is all about
+
+There are other things that are also considered related to functional
+programming:
+
++ A programming style that encourages recursion and recursive data structures
+
++ Programming with a syntax or style that is closer to traditional mathematical
+  definitions of functions
+
++ Anything that is not object-oriented programming (this one is really
+  incorrect)
+
++ Using certain programming idioms related to /laziness/, a technical term for
+  a certain kind of programming construct/idiom we will study, briefly, later
+  in the course
+
+An obvious related question is “what makes a programming language a functional
+language?” Your instructor has come to the conclusion this is not a question
+for which there is a precise answer and barely makes sense as a question. But
+one could say that a functional language is one where writing in a functional
+style (as described above) is more convenient, more natural, and more common
+than programming in other styles. At a minimum, you need good support for
+immutable data, first-class functions, and function closures. More and more we
+are seeing new languages that provide such support but also provide good
+support for other styles, like object-oriented programming, which we will study
+some toward the end of the course.
+
+** Taking Functions as Arguments
+
+The most common use of first-class functions is passing them as arguments to
+other functions, so we motivate this use first.
+
+Here is a first example of a function that takes another function:
+
+#+BEGIN_SRC sml
+  fun n_times (f,n,x) =
+    if n=0
+    then x
+    else f (n_times(f,n-1,x))
+#+END_SRC
+
+We can tell the argument =f= is a function because the last line calls =f= with
+an argument. What =n_times= does is compute =f(f(...(f(x))))= where the number
+of calls to =f= is =n=. That is a genuinely useful helper function to have
+around. For example, here are 3 different uses of it:
+
+#+BEGIN_SRC sml
+  fun double x = x+x
+  val x1 = n_times(double,4,7) (* answer: 112 *)
+
+  fun increment x = x+1
+  val x2 = n_times(increment,4,7) (* answer: 11 *)
+
+  val x3 = n_times(tl,2,[4,8,12,16]) (* answer: [12,16] *)
+#+END_SRC
+
+Like any helper function, =n_times= lets us abstract the common parts of
+multiple computations so we can reuse some code in different ways by passing in
+different arguments. The main novelty is making one of those arguments a
+function, which is a powerful and flexible programming idiom. It also makes
+perfect sense — we are not introducing any new language constructs here, just
+using ones we already know in ways you may not have thought of.
+
+Once we define such abstractions, we can find additional uses for them. For
+example, even if our program today does not need to triple any values /n/
+times, maybe tomorrow it will, in which case we can just define the function
+=triple_n_times= using =n_times=:
+
+#+BEGIN_SRC sml
+  fun triple x = 3*x
+  fun triple_n_times (n,x) = n_times(triple,n,x)
+#+END_SRC
+** Polymorphic Types and Functions as Arguments
+
+Let us now consider the type of =n_times=, which is =(’a -> ’a) * int * ’a ->
+’a=. It might be simpler at first to consider the type =(int -> int) * int *
+int -> int=, which is how =n_times= is used for =x1= and =x2= above: It takes 3
+arguments, the first of which is itself a function that takes and returns an
+int. Similarly, for =x3= we use =n_times= as though it has type =(int list ->
+int list) * int * int list -> int list=. But choosing either one of these types
+for =n_times= would make it less useful because only some of our example uses
+would type-check. The type =(’a -> ’a) * int * ’a -> ’a= says the third
+argument and result can be any type, but they have to be the same type, as does
+the argument and return type for the first argument. When types can be any type
+and do not have to be the same as other types, we use different letters (=’b=,
+=’c=, etc.)
+
+This is called /parametric polymorphism/, or perhaps more commonly /generic
+types/. It lets functions take arguments of any type. It is a separate issue
+from first-class functions:
+
++ There are functions that take functions and do not have polymorphic types
+
++ There are functions with polymorphic types that do not take functions
+
+However, many of our examples with first-class functions will have polymorphic
+types. That is a good thing because it makes our code more reusable.
+
+Without parametric polymorphism, we would have to redefine lists for every type
+of element that a list might have. Instead, we can have functions that work for
+any kind of list, like length, which has type =’a list -> int= even though it
+does not use any function arguments. Conversely, here is a higher-order
+function that is not polymorphic: it has type =(int->int) * int -> int=[fn:7]:
+
+#+BEGIN_SRC sml
+  fun times_until_zero (f,x) =
+    if x = 0 then 0 else 1 + times_until_zero(f, f x)
+#+END_SRC
+** Anonymous functions
+
+There is no reason that a function like =triple= that is passed to another
+function like =n_times= needs to be defined at top-level. As usual, it is
+better style to define such functions locally if they are needed only locally.
+So we could write:
+
+#+BEGIN_SRC sml
+  fun triple_n_times (n,x) =
+    let fun triple x = 3*x in n_times(triple,n,x) end
+#+END_SRC
+
+In fact, we could give the triple function an even smaller scope: we need it
+only as the first argument to =n_times=, so we could have a let-expression
+there that evaluates to the triple function:
+
+#+BEGIN_SRC sml
+  fun triple_n_times (n,x) =
+    n_times((let fun triple y = 3*y in triple end), n, x)
+#+END_SRC
+
+Notice that in this example, which is actually poor style, we need to have the
+let-expression “return” =triple= since, as always, a let-expression produces
+the result of the expression between =in= and =end=. In this case, we simply
+look up triple in the environment, and the resulting function is the value that
+we then pass as the first argument to =n_times=.
+
+
+ML has a much more concise way to define functions right where you use them, as
+in this final, best version:
+
+#+BEGIN_SRC sml
+  fun triple_n_times (n,x) = n_times((fn y => 3*y), n, x)
+#+END_SRC
+
+This code defines an /anonymous function/ =fn y => 3*y=. It is a function that
+takes an argument =y= and has body =3*y=. The =fn= is a keyword and *=>* (not
+=) is also part of the syntax. We never gave the function a name (it is
+/anonymous/, see?), which is convenient because we did not need one. We just
+wanted to pass a function to =n_times=, and in the body of =n_times=, this
+function is bound to =f=.
+
+It is common to use anonymous functions as arguments to other functions.
+Moreover, you can put an anonymous function anywhere you can put an expression
+— it simply is a value, the function itself. The only thing you cannot do with
+an anonymous function is recursion, exactly because you have no name to use for
+the recursive call. In such cases, you need to use a =fun= binding as before,
+and =fun= bindings must be in let-expressions or at top-level.
+
+For non-recursive functions, you could use anonymous functions with =val=
+bindings instead of a =fun= binding. For example, these two bindings are
+exactly the same thing:
+
+#+BEGIN_SRC sml
+  fun increment x = x + 1
+  val increment = fn x => x+1
+#+END_SRC
+
+They both bind increment to a value that is a function that returns its
+argument plus 1. So function-bindings are almost syntactic sugar, but they
+support recursion, which is essential.
+
+** Unnecessary Function Wrapping
+
+While anonymous functions are incredibly convenient, there is one poor idiom
+where they get used for no good reason. Consider:
+
+#+BEGIN_SRC sml
+  fun nth_tail_poor (n,x) = n_times((fn y => tl y), n, x)
+#+END_SRC
+
+What is =fn y => tl y=? It is a function that returns the list-tail of its
+argument. But there is already a variable bound to a function that does the
+exact same thing: =tl=! In general, there is no reason to write =fn x => f x=
+when we can just use =f=. This is analogous to the beginner’s habit of writing
+=if x then true else false= instead of =x=. Just do this:
+
+#+BEGIN_SRC sml
+  fun nth_tail (n,x) = n_times(tl, n, x)
+#+END_SRC
+** Maps and filters
+
+We now consider a very useful higher-order function over lists:
+
+#+BEGIN_SRC sml
+  fun map (f,xs) =
+    case xs of
+        [] => []
+      | x::xs’ => (f x)::(map(f,xs’))
+#+END_SRC
+
+The =map= function takes a list and a function =f= and produces a new list by
+applying =f= to each element of the list. Here are two example uses:
+
+#+BEGIN_SRC sml
+  val x1 = map (increment, [4,8,12,16]) (* answer: [5,9,13,17] *)
+  val x2 = map (hd, [[1,2],[3,4],[5,6,7]]) (* answer: [1,3,5] *)
+#+END_SRC
+
+The type of =map= is illuminating: =(’a -> ’b) * ’a list -> ’b list=. You can
+pass =map= any kind of list you want, but the argument type of =f= must be the
+element type of the list (they are both =’a=). But the return type of =f= can
+be a different type =’b=. The resulting list is a =’b list=. For =x1=, both
+=’a= and =’b= are instantiated with =int=. For =x2=, =’a= is =int list= and
+=’b= is =int=.
+
+The ML standard library provides a very similar function =List.map=, but it is
+defined in a curried form, a topic we will discuss later in this unit.
+
+The definition and use of =map= is an incredibly important idiom even though
+our particular example is simple. We could have easily written a recursive
+function over lists of integers that incremented all the elements, but instead
+we divided the work into two parts: The map implementer knew how to traverse a
+recursive data structure, in this case a list. The map client knew what to do
+with the data there, in this case increment each number. You could imagine
+either of these tasks — traversing a complicated piece of data or doing some
+calculation for each of the pieces — being vastly more complicated and best
+done by different developers without making assumptions about the other task.
+That is exactly what writing =map= as a helper function that takes a function
+lets us do.
+
+
+Here is a second very useful higher-order function for lists. It takes a
+function of type =’a -> bool= and an =’a list= and returns the =’a list=
+containing only the elements of the input list for which the function returns
+true:
+
+#+BEGIN_SRC sml
+  fun filter (f,xs) =
+    case xs of
+        [] => []
+      | x::xs’ => if f x
+                  then x::(filter (f,xs’))
+                  else filter (f,xs’)
+#+END_SRC
+
+Here is an example use that assumes the list elements are pairs with second
+component of type =int=; it returns the list elements where the second
+component is even:
+
+#+BEGIN_SRC sml
+  fun get_all_even_snd xs = filter((fn (_,v) => v mod 2 = 0), xs)
+#+END_SRC
+
+(Notice how we are using a pattern for the argument to our anonymous function.)
+
+** Returning functions
+
+Functions can also return functions. Here is an example:
+
+#+BEGIN_SRC sml
+  fun double_or_triple f =
+    if f 7
+    then fn x => 2*x
+    else fn x => 3*x
+#+END_SRC
+
+The type of =double_or_triple= is =(int -> bool) -> (int -> int)=: The if-test
+makes the type of =f= clear and as usual the two branches of the if must have
+the same type, in this case =int->int=. However, ML will print the type as
+=(int -> bool) -> int -> int=, which is the same thing. The parentheses are
+unnecessary because the =->= “associates to the right”, i.e., =t1 -> t2 -> t3
+-> t4= is =t1 -> (t2 -> (t3 -> t4))=.
+
+** Not just for numbers and lists
+
+Because ML programs tend to use lists a lot, you might forget that higher-order
+functions are useful for more than lists. Some of our first examples just used
+integers. But higher-order functions also are great for our own data
+structures. Here we use an =is_even= function to see if all the constants in an
+arithmetic expression are even. We could easily reuse =true_of_all_constants=
+for any other property we wanted to check.
+
+#+BEGIN_SRC sml
+  datatype exp = Constant of int | Negate of exp | Add of exp * exp |
+                 Multiply of exp * exp
+
+  fun is_even v =
+    (v mod 2 = 0)
+
+  fun true_of_all_constants(f,e) =
+    case e of
+        Constant i      => f i
+      | Negate e1       => true_of_all_constants(f,e1)
+      | Add(e1,e2)      => true_of_all_constants(f,e1) andalso
+                           true_of_all_constants(f,e2)
+      | Multiply(e1,e2) => true_of_all_constants(f,e1) andalso
+                           true_of_all_constants(f,e2)
+
+  fun all_even e = true_of_all_constants(is_even,e)
+#+END_SRC
+** Lexical Scope
+
+So far, the functions we have passed to or returned from other functions have
+been closed: the function bodies used only the function’s argument(s) and any
+locally defined variables. But we know that functions can do more than that:
+they can use any bindings that are in scope. Doing so in combination with
+higher-order functions is very powerful, so it is crucial to learn effective
+idioms using this technique. But first it is even more crucial to get the
+semantics right. This is probably the most subtle and important concept in the
+entire course, so go slowly and read carefully.
+
+/The body of a function is evaluated in the environment where the function is/
+*defined*, /not the environment where the function is/ *called*. Here is a very
+simple example to demonstrate the difference:
+
+#+BEGIN_SRC sml
+  val x = 1
+  fun f y = x + y
+  val x = 2
+  val y = 3
+  val z = f (x+y)
+#+END_SRC
+
+In this example, =f= is bound to a function that takes an argument =y=. Its
+body also looks up =x= in the environment where =f= was defined. Hence this
+function always increments its argument since the environment at the definition
+maps =x= to =1=. Later we have a different environment where =f= maps to this
+function, =x= maps to =2=, =y= maps to =3=, and we make the call =f x=. Here is
+how evaluation proceeds:
+
++ Look up =f= to get the previously described function.
+
++ Evaluate the argument =x+y= in the current environment by looking up =x= and
+  =y=, producing =5=.
+
++ Call the function with the argument =5=, which means evaluating the body
+  =x+y= in the “old” environment where =x= maps to =1= extended with =y=
+  mapping to =5=. So the result is =6=.
+
+Notice the argument was evaluated in the current environment (producing =5=),
+but the function body was evaluated in the “old” environment. We discuss below
+why this semantics is desirable, but first we define this semantics more
+precisely and understand the semantics with additional silly examples that use
+higher-order functions.
+
+This semantics is called /lexical scope/. The alternate, inferior semantics
+where you use the current environment (which would produce =7= in the above
+example) is called /dynamic scope/.
+
+** Environments and Closures
+
+We have said that functions are values, but we have not been precise about what
+that value exactly is. We now explain that a _function value has two parts_,
+the *code* for the function (obviously) and the *environment that was current
+when we created the function*. These two parts really do form a “pair” but we
+put “pair” in quotation marks because it is not an ML pair, just something with
+two parts. You cannot access the parts of the “pair” separately; all you can do
+is call the function. This _call uses both parts because it evaluates the code
+part using the environment part_.
+
+This “pair” is called a /function closure/ or just /closure/. The reason is that
+while the code itself can have free variables (variables that are not bound
+inside the code so they need to be bound by some outer environment), the
+closure carries with it an environment that provides all these bindings. So the
+closure overall is “closed” — it has everything it needs to produce a function
+result given a function argument.
+
+In the example above, the binding =fun f y = x + y= bound =f= to a closure. The
+code part is the function =fn y => x + y= and the environment part maps =x= to
+=1=. Therefore, any call to this closure will return =y+1=.
+
+** (Silly) Examples Including Higher-Order Functions
+
+Lexical scope and closures get more interesting when we have higher-order
+functions, but the semantics already described will lead us to the right
+answers.
+
+Example 1:
+
+#+BEGIN_SRC sml
+  val x = 1
+  fun f y =
+    let
+        val x = y + 1
+    in
+        fn z => x + y +z
+    end
+  val x = 3
+  val g = f 4
+  val y = 5
+  val z = g 6
+#+END_SRC
+
+Here, =f= is bound to a closure where the environment part maps =x= to =1=. So
+when we later evaluate =f 4=, we evaluate /let val x = y + 1 in fn z => x + y
++z end/ in an environment where =x= maps to =1= extended to map =y= to =4=. But
+then due to the let-binding we shadow =x= so we evaluate fn z => x + y + z in
+an environment where =x= maps to =5= and =y= maps to =4=. How do we evaluate a
+function like =fn z => x + y + z=? We create a closure with the current
+environment. So =f 4= returns a closure that, when called, will always add =9=
+to its argument, no matter what the environment is at any call-site. Hence, in
+the last line of the example, =z= will be bound to =15=.
+
+Example 2:
+
+#+BEGIN_SRC sml
+  fun f g =
+    let
+        val x = 3
+    in
+        g 2
+    end
+  val x = 4
+  fun h y = x + y
+  val z = f h
+#+END_SRC
+
+In this example, =f= is bound to a closure that takes another function =g= as
+an argument and returns the result of =g 2=. The closure bound to =h= always
+adds =4= to its argument because the argument is =y=, the body is =x+y=, and
+the function is defined in an environment where =x= maps to =4=. So in the last
+line, =z= will be bound to =6=. The binding =val x = 3= is totally irrelevant:
+the call =g 2= is evaluated by looking up =g= to get the closure that was
+passed in and then using that closure with its environment (in which =x= maps
+to =4=) with =2= for an argument.
+
+** Why Lexical Scope
+
+While lexical scope and higher-order functions take some getting used to,
+decades of experience make clear that this semantics is what we want. Much of
+the rest of this section will describe various widespread idioms that are
+powerful and that rely on lexical scope.
+
+But first we can also motivate lexical scope by showing how dynamic scope
+(where you just have one current environment and use it to evaluate function
+bodies) leads to some fundamental problems.
+
+First,suppose in Example1 above the body of =f= was changed to /let val q = y+1
+in fn z => q + y + z/. Under lexical scope this is fine: we can always change
+the name of a local variable and its uses without it affecting anything. Under
+dynamic scope, now the call to =g 6= will make no sense: we will try to look up
+=q=, but there is no =q= in the environment at the call-site.
+
+Second,consider again the original version of Example1 but now change the line
+=val x = 3= to =val x == "hi". Under lexical scope, this is again fine: that
+binding is never actually used. Under dynamic scope, the call to =g 6= will
+look-up =x=, get a string, and try to add it, which should not happen in a
+program that type-checks.
+
+Similar issues arise with Example 2: The body of =f= in this example is awful: we
+have a local binding we never use. Under lexical scope we can remove it,
+changing the body to =g 2= and know that this has no effect on the rest of the
+program. Under dynamic scope it would have an effect. Also, under lexical scope
+we know that any use of the closure bound to =h= will add =4= to its argument
+regardless of how other functions like =g= are implemented and what variable
+names they use. This is a key separation-of-concerns that only lexical scope
+provides.
+
+For “regular” variables in programs, lexical scope is the way to go. There are
+some compelling uses for dynamic scoping for certain idioms, but few languages
+have special support for these (Racket does) and very few if any modern
+languages have dynamic scoping as the default. But you have seen one feature
+that is more like dynamic scope than lexical scope: exception handling. When an
+exception is raised, evaluation has to “look up” which handle expression should
+be evaluated. This “look up” is done using the dynamic call stack, with no
+regard for the lexical structure of the program.
+
+** Passing Closures to Iterators Like Filter
+
+The examples above are silly, so we need to show useful programs that rely on
+lexical scope. The first idiom we will show is passing functions to iterators
+like /map/ and /filter/. The functions we previously passed did not use their
+environment (only their arguments and maybe local variables), but being able to
+pass in closures makes the higher-order functions much more widely useful.
+Consider:
+
+#+BEGIN_SRC sml
+  fun filter (f,xs) =
+    case xs of
+        [] => []
+      | x::xs’ => if f x then x::(filter(f,xs’)) else filter(f,xs’)
+
+  fun allGreaterThanSeven xs = filter (fn x => x > 7, xs)
+  fun allGreaterThan (xs,n) = filter (fn x => x > n, xs)
+#+END_SRC
+
+Here, =allGreaterThanSeven= is “old news” — we pass in a function that removes
+from the result any numbers 7 or less in a list. But it is much more likely
+that you want a function like =allGreaterThan= that takes the “limit” as a
+parameter =n= and uses the function =fn x => x > n=. Notice this requires a
+closure and lexical scope! When the implementation of filter calls this
+function, we need to look up =n= in the environment where =fn x => x > n= was
+defined.
+
+Here are two additional examples:
+
+#+BEGIN_SRC sml
+  fun allShorterThan1 (xs,s) = filter (fn x => String.size x < String.size s, xs)
+
+  fun allShorterThan2 (xs,s) =
+    let
+        val i = String.size s
+    in
+        filter(fn x => String.size x < i, xs)
+    end
+#+END_SRC
+
+Both these functions take a list of strings =xs= and a string =s= and return a
+list containing only the strings in =xs= that are shorter than =s=. And they
+both use closures, to look up =s= or =i= when the anonymous functions get
+called. The second one is more complicated but a bit more efficient: The first
+one recomputes =String.size s= once per element in =xs= (because filter calls
+its function argument this many times and the body evaluates =String.size s=
+each time). The second one “precomputes” =String.size s= and binds it to a
+variable =i= available to the function =fn x => String.size x < i=.
+
+** Fold and More Closure Examples
+
+Beyond /map/ and /filter/, a third incredibly useful higher-order function is
+/fold/, which can have several slightly different definitions and is also known
+by names such as /reduce/ and /inject/. Here is one common definition:
+
+#+BEGIN_SRC sml
+  fun fold (f,acc,xs) =
+    case xs of
+        []     => acc
+      | x::xs’ => fold (f, f(acc,x), xs’)
+#+END_SRC
+
+=fold= takes an “initial answer” =acc= and uses =f= to “combine” =acc= and the
+first element of the list, using this as the new “initial answer” for “folding”
+over the rest of the list. We can use =fold= to take care of iterating over a
+list while we provide some function that expresses how to combine elements. For
+example, to sum the elements in a list =foo=, we can do:
+
+#+BEGIN_SRC sml
+  fold ((fn (x,y) => x+y), 0, foo)
+#+END_SRC
+
+As with =map= and =filter=, much of =fold= ’s power comes from clients passing
+closures that can have “private fields” (in the form of variable bindings) for
+keeping data they want to consult. Here are two examples. The first counts how
+many elements are in some integer range. The second checks if all elements are
+strings shorter than some other string’s length.
+
+#+BEGIN_SRC sml
+  fun numberInRange (xs,lo,hi) =
+    fold ((fn (x,y) =>
+              x + (if y >= lo andalso y <= hi then 1 else 0)),
+          0, xs)
+
+  fun areAllShorter (xs,s) =
+    let
+        val i = String.size s
+    in
+        fold((fn (x,y) => x andalso String.size y < i), true, xs)
+    end
+#+END_SRC
+
+This pattern of splitting the recursive traversal (=fold= or =map=) from the
+data-processing done on the elements (the closures passed in) is fundamental.
+In our examples, both parts are so easy we could just do the whole thing
+together in a few simple lines. More generally, we may have a very complicated
+set of data structures to traverse or we may have very involved data processing
+to do. It is good to separate these concerns so that the programming problems
+can be solved separately.
+
+** Another Closure Idiom: Combining Functions
+
+/Function composition/
+
+When we program with lots of functions, it is useful to create new functions
+that are just combinations of other functions. You have probably done similar
+things in mathematics, such as when you compose two functions. For example,
+here is a function that does exactly function composition:
+
+#+BEGIN_SRC sml
+  fun compose (f,g) = fn x => f (g x)
+#+END_SRC
+
+It takes two functions =f= and =g= and returns a function that applies its
+argument to =g= and makes that the argument to =f=. Crucially, the code =fn x
+=> f (g x)= uses the =f= and =g= in the environment where it was defined.
+Notice the type of compose is inferred to be =(’a -> ’b) * (’c -> ’a) -> ’c
+->’b=, which is equivalent to what you might write: =(’b -> ’c) * (’a -> ’b) ->
+(’a -> ’c)= since the two types simply use different type-variable names
+consistently.
+
+
+As a cute and convenient library function, the ML library defines the infix
+operator =o= as function composition, just like in math. So instead of writing:
+
+#+BEGIN_SRC sml
+  fun sqrt_of_abs i = Math.sqrt(Real.fromInt (abs i))
+#+END_SRC
+
+you could write:
+
+#+BEGIN_SRC sml
+  fun sqrt_of_abs i = (Math.sqrt o Real.fromInt o abs) i
+#+END_SRC
+
+But this second version makes clearer that we can just use function-composition
+to create a function that we bind to a variable with a val-binding, as in this
+third version:
+
+#+BEGIN_SRC sml
+  val sqrt_of_abs = Math.sqrt o Real.fromInt o abs
+#+END_SRC
+
+While all three versions are fairly readable, the first one does not
+immediately indicate to the reader that =sqrt_of_abs= is just the composition
+of other functions.
+
+
+/The Pipeline Operator/
+
+In functional programming, it is very common to compose other functions to
+create larger ones, so it makes sense to define convenient syntax for it. While
+the third version above is concise, it, like function composition in
+mathematics, has the strange-to-many-programmers property that the computation
+proceeds from right-to-left: “Take the absolute value, convert it to a real,
+and compute the square root” may be easier to understand than, “Take the square
+root of the conversion to real of the absolute value.”
+
+We can define convenient syntax for left-to-right as well. Let’s first define
+our own infix operator that lets us put the function to the right of the
+argument we are calling it with:
+
+#+BEGIN_SRC sml
+  infix |> (* tells the parser |> is a function that appears between its two *)
+           (* arguments *) 
+  fun x |> f = f x
+#+END_SRC
+
+Now we can write:
+
+#+BEGIN_SRC sml
+  fun sqrt_of_abs i = i |> abs |> Real.fromInt |> Math.sqrt
+#+END_SRC
+
+This operator, commonly called the /pipeline operator/, is very popular in =F#=
+programming. (=F#= is a dialect of ML that runs on .Net and interacts well with
+libraries written in other .Net languages.) As we have seen, there is nothing
+complicated about the semantics of the pipeline operator.
+
+** Another Closure Idiom: Currying and Partial Application
+
+The next idiom we consider is very convenient in general, and is often used
+when defining and using higher-order functions like /map/, /filter/, and
+/fold/. We have already seen that in ML every function takes exactly one
+argument, so you have to use an idiom to get the effect of multiple arguments.
+Our previous approach passed a tuple as the one argument, so each part of the
+tuple is conceptually one of the multiple arguments. Another more clever and
+often more convenient way is to have a function take the first conceptual
+argument and return another function that takes the second conceptual argument
+and so on. Lexical scope is essential to this technique working correctly.
+
+This technique is called /currying/ after a logician named Haskell Curry who
+studied related ideas (so if you do not know that, then the term currying does
+not make much sense).
+
+
+/Defining and Using a Curried Function/
+
+Here is an example of a “three argument” function that uses currying:
+
+#+BEGIN_SRC sml
+  val sorted3 = fn x => fn y => fn z => z >= y andalso y >= x
+#+END_SRC
+
+If we call =sorted3 4= we will get a closure that has =x= in its environment.
+If we then call this closure with =5=, we will get a closure that has =x= and
+=y= in its environment. If we then call this closure with =6=, we will get true
+because 6 is greater than 5 and 5 is greater than 4. That is just how closures
+work.
+
+So =((sorted3 4) 5) 6= computes exactly what we want and feels pretty close to
+calling sorted3 with 3 arguments. Even better, the parentheses are optional, so
+we can write exactly the same thing as =sorted3 4 5 6=, which is actually fewer
+characters than our old tuple approach where we would have:
+
+#+BEGIN_SRC sml
+  fun sorted3_tupled (x,y,z) = z >= y andalso y >= x
+  val someClient = sorted3_tupled(4,5,6)
+#+END_SRC
+
+In general, the syntax =e1 e2 e3 e4 is= implicitly the nested function calls
+=(((e1 e2) e3) e4)= and this choice was made because it makes using a curried
+function so pleasant.
+
+
+/Partial Application/
+
+Even though we might expect most clients of our curried =sorted3= to provide
+all 3 conceptual arguments, they might provide fewer and use the resulting
+closure later. This is called “partial application” because we are providing a
+subset (more precisely, a prefix) of the conceptual arguments. As a silly
+example, =sorted3 0 0= returns a function that returns =true= if its argument is
+nonnegative.
+
+
+/Partial Application and Higher-Order Functions/
+
+Currying is particularly convenient for creating similar functions with
+iterators. For example, here is a curried version of a =fold= function for
+lists:
+
+#+BEGIN_SRC sml
+  fun fold f = fn acc => fn xs =>
+                  case xs of
+                      []     => acc
+                    | x::xs’ => fold f (f(acc,x)) xs’
+#+END_SRC
+
+Now we could use this =fold= to define a function that sums a list elements
+like this:
+
+#+BEGIN_SRC sml
+  fun sum1 xs = fold (fn (x,y) => x+y) 0 xs
+#+END_SRC
+
+But that is unnecessarily complicated compared to just using partial
+application:
+
+#+BEGIN_SRC sml
+  val sum2 = fold (fn (x,y) => x+y) 0
+#+END_SRC
+
+The convenience of partial application is why many iterators in ML’s standard
+library use currying with the function they take as the first argument. For
+example, the types of all these functions use currying:
+
++ val List.map = fn : (’a -> ’b) -> ’a list -> ’b list
++ val List.filter = fn : (’a -> bool) -> ’a list -> ’a list
++ val List.foldl = fn : (’a * ’b -> ’b) -> ’b -> ’a list -> ’b
+
+As an example, =List.foldl((fn (x,y) => x+y), 0, [3,4,5])= does not type-check
+because =List.foldl= expects a =’a * ’b -> ’b= function, not a triple. The
+correct call is =List.foldl (fn (x,y) => x+y) 0 [3,4,5]=, which calls
+=List.foldl= with a function, which returns a closure and so on.
+
+There is syntactic sugar for defining curried functions; you can just separate
+the conceptual arguments by spaces rather than using anonymous functions. So
+the better style for our fold function would be:
+
+#+BEGIN_SRC sml
+  fun fold f acc xs =
+    case xs of
+        []     => acc
+      | x::xs’ => fold f (f(acc,x)) xs’
+#+END_SRC
+
+Another useful curried function is =List.exists=, which we use in the callback
+example below. These library functions are easy to implement ourselves, so we
+should understand they are not fancy:
+
+#+BEGIN_SRC sml
+  fun exists predicate xs =
+    case xs of
+        [] => false
+      | x::xs’ => predicate x orelse exists predicate xs’
+
+#+END_SRC
+
+
+/Currying in General/
+
+While currying and partial application are great for higher-order functions,
+they are great in general too. They work for any multi-argument function and
+partial application can also be surprisingly convenient. In this example, both
+=zip= and =range= are defined with currying and =countup= partially applies
+=range=. The =add_numbers= function turns the list =[v1,v2,...,vn]= into
+=[(1,v1),(2,v2),...,(n,vn)]=.
+
+#+BEGIN_SRC sml
+  fun zip xs ys =
+    case (xs,ys) of
+        ([],[]) => []
+      | (x::xs’,y::ys’) => (x,y) :: (zip xs’ ys’)
+      | _ => raise Empty
+
+  fun range i j = if i > j then [] else i :: range (i+1) j
+
+  val countup  = range 1
+
+  fun add_numbers xs = zip (countup (length xs)) xs
+#+END_SRC
+
+
+/Combining Functions to Curry and Uncurry Other Functions/
+
+Sometimes functions are curried but the arguments are not in the order you want
+for a partial application. Or sometimes a function is curried when you want it
+to use tuples or vice-versa. Fortunately our earlier idiom of combining
+functions can take functions using one approach and produce functions using
+another:
+
+#+BEGIN_SRC sml
+  fun other_curry1 f = fn x => fn y => f y x
+  fun other_curry2 f x y = f y x
+  fun curry f x y = f (x,y)
+  fun uncurry f (x,y) = f x y
+#+END_SRC
+
+Looking at the types of these functions can help you understand what they do.
+As an aside, the types are also fascinating because if you pronounce =->= as
+“implies” and =*= as “and”, the types of all these functions are logical
+tautologies.
+
+
+/Efficiency/
+
+Finally, you might wonder which is faster, currying or tupling. It almost never
+matters; they both do work proportional to the number of conceptual arguments,
+which is typically quite small. For the performance-critical functions in your
+software, it might matter to pick the faster way. In the version of the ML
+compiler we are using, tupling happens to be faster. In widely used
+implementations of OCaml, Haskell, and F#, curried functions are faster so they
+are the standard way to define multi-argument functions in those languages.
+
+** The Value Restriction
+
+Once you have learned currying and partial application, you might try to use it
+to create a polymorphic function. Unfortunately, certain uses, such as these,
+do not work in ML:
+
+#+BEGIN_SRC sml
+  (*turn [v1,v2,...,vn] into [SOME v1, SOME v2, ..., SOME vn]*)
+  val mapSome = List.map SOME
+
+  (*turn [v1,v2,...,vn] into [(v1,v1),(v2,v2),...,(vn,vn)]*)
+  val pairIt = List.map (fn x => (x,x))
+#+END_SRC
+
+Given what we have learned so far, there is no reason why this should not work,
+especially since all these functions do work:
+
+#+BEGIN_SRC sml
+  fun mapSome xs = List.map SOME xs
+  val mapSome = fn xs => List.map SOME xs
+  val pairIt : int list -> (int * int) list = List.map (fn x => (x,x))
+  val incrementIt = List.map (fn x => x+1)
+#+END_SRC
+
+The reason is called the /value restriction/ and it is sometimes annoying. It is
+in the language for good reason: without it, the type-checker might allow some
+code to break the type system. This can happen only with code that is using
+mutation and the code above is not, but the type-checker does not know that.
+
+The simplest approach is to ignore this issue until you get a warning/error
+about the value restriction. When you do, turn the val-binding back into a
+fun-binding like in the first example above of what works.
+
+When we study type inference in the next unit, we will discuss the value
+restriction in a little more detail. 
+
+** Mutation via ML References
+
+We now finally introduce ML’s support for mutation. Mutation is okay in some
+settings. A key approach in functional programming is to use it only when
+“updating the state of something so all users of that state can see a change
+has occurred” is the natural way to model your computation. Moreover, we want
+to keep features for mutation separate so that we know when mutation is not
+being used.
+
+In ML, most things really cannot be mutated. Instead you must create a
+reference, which is a container whose contents can be changed. You create a new
+reference with the expression =ref e= (the initial contents are the result of
+evaluating e). You get a reference =r= ’s current contents with =!r= (not to be
+confused with negation in Java or C), and you change =r= ’s contents with /r :=
+e=/. The type of a reference that contains values of type =t= is written =t
+ref=.
+
+One good way to think about a reference is as a record with one field where
+that field can be updated with the =:== operator.
+
+Here is a short example:
+
+#+BEGIN_SRC sml
+  val x = ref 0
+  val x2 = x (* x and x2 both refer to the same reference *)
+  val x3 = ref 0
+  (* val y = x + 1*) (* wrong: x is not an int *)
+  val y = (!x) + 1 (* y is 1 *)
+  val _ = x := (!x) + 7 (* the contents of the reference x refers to is now 7 *)
+  val z1 = !x (*z1 is 7*)
+  val z2 = !x2 (* z2 is also 7 -- with mutation, aliasing matters*)
+  val z3 = !x3 (* z3 is 0 *)
+#+END_SRC
+** Another Closure Idiom: Callbacks
+
+The next common idiom we consider is implementing a library that detects when
+“events” occur and informs clients that have previously “registered” their
+interest in hearing about events. Clients can register their interest by
+providing a “callback” — a function that gets called when the event occurs.
+Examples of events for which you might want this sort of library include things
+like users moving the mouse or pressing a key. Data arriving from a network
+interface is another example. Computer players in a game where the events are
+“it is your turn” is yet another.
+
+The purpose of these libraries is to allow multiple clients to register
+callbacks. The library implementer has no idea what clients need to compute
+when an event occurs, and the clients may need “extra data” to do the
+computation. So the library implementor should not restrict what “extra data”
+each client uses. A closure is ideal for this because a function’s type =t1 ->
+t2= does not specify the types of any other variables a closure uses, so we can
+put the “extra data” in the closure’s environment.
+
+If you have used “event listeners” in Java’s Swing library, then you have used
+this idiom in an object-oriented setting. In Java, you get “extra data” by
+defining a subclass with additional fields. This can take an awful lot of
+keystrokes for a simple listener, which is a (the?) main reason the Java
+language added anonymous inner classes (which you do not need to know about for
+this course, but we will show an example later), which are closer to the
+convenience of closures.
+
+In ML, we will use mutation to show the callback idiom. This is reasonable
+because we really do want registering a callback to “change the state of the
+world” — when an event occurs, there are now more callbacks to invoke.
+
+Our example uses the idea that callbacks should be called when a key on the
+keyboard is pressed. We will pass the callbacks an =int= that encodes which key
+it was. Our interface just needs a way to register callbacks. (In a real
+library, you might also want a way to unregister them.)
+
+#+BEGIN_SRC sml
+  val onKeyEvent : (int -> unit) -> unit
+#+END_SRC
+
+Clients will pass a function of type =int -> unit= that, when called later with
+an =int=, will do whatever they want. To implement this function, we just use a
+reference that holds a list of the callbacks. Then when an event actually
+occurs, we assume the function =onEvent= is called and it calls each callback
+in the list:
+
+#+BEGIN_SRC sml
+  val cbs : (int -> unit) list ref = ref []
+  fun onKeyEvent f = cbs := f::(!cbs) (* The only "public" binding *)
+  fun onEvent i =
+    let fun loop fs =
+          case fs of
+              [] => ()
+            | f::fs’ => (f i; loop fs’)
+    in loop (!cbs) end
+#+END_SRC
+
+Most importantly, the type of =onKeyEvent= places no restriction on what extra
+data a callback can access when it is called. Here are different clients (calls
+to onKeyEvent) that use different bindings of different types in their
+environment. (The =val _ = e= idiom is common for executing an expression just
+for its side-effect, in this case registering a callback.)
+
+#+BEGIN_SRC sml
+  val timesPressed = ref 0
+  val _ = onKeyEvent (fn _ => timesPressed := (!timesPressed) + 1)
+
+  fun printIfPressed i =
+    onKeyEvent (fn j => if i=j
+                        then print ("you pressed " ^ Int.toString i ^ "\n")
+                        else ())
+
+  val _ = printIfPressed 4
+  val _ = printIfPressed 11
+  val _ = printIfPressed 23
+#+END_SRC
+** Standard-Library Documentation
+
+This topic is not closely related to the rest of the unit, but we need it a
+little for Homework 3, it is useful for any programming language, and it shows
+some of the useful functions (higher-order or not) predefined in ML.
+
+ML, like many languages, has a standard library. This is code that programs in
+the language can assume is always available. There are two common and distinct
+reasons for code to be in a standard library:
+
++ We need a standard-library to interface with the “outside world” to provide
+  features that would otherwise be impossible to implement. Examples include
+  opening a file or setting a timer.
+
++ A standard-library can provide functions so common and useful that it is
+  appropriate to define them once so that all programs can use the same
+  function name, order of arguments, etc. Examples include functions to
+  concatenate two strings, map over a list, etc.
+
+
+Standard libraries are usually so large that it makes no sense to expect to be
+taught them. You need to get comfortable seeking out documentation and
+developing a rough intuition on “what is likely provided” and “where it is
+likely to be.” So on Homework 3, we are leaving it to you to find out more
+about a few simple functions in ML’s Standard Library.
+
+The online documentation is very primitive compared to most modern languages,
+but it is entirely sufficient for our needs. Just go to:
+
+http://www.standardml.org/Basis/manpages.html
+
+The functions are organized using ML’s module system, which we will study the
+basics of in the next unit. For example, useful functions over characters are
+in the structure =Char=. To use a function =foo= in structure =Bar=, you write
+=Bar.foo=, which is exactly how we have been using functions like =List.map=.
+One wrinkle is that functions for the =String= structure are documented under the
+signature =STRING=. Signatures are basically types for structures, as we will
+study later. Certain library functions are considered so useful they are not in
+a structure, like =hd=. These bindings are described at
+
+http://www.standardml.org/Basis/top-level-chapter.html.
+
+There is no substitute for precise and complete documentation of code
+libraries, but sometimes it can be inconvenient to look up the full
+documentation when you are in the middle of programming and just need a quick
+reminder. For example, it is easy to forget the order of arguments or whether a
+function is curried or tupled. Often you can use the REPL to get the
+information you need quickly. After all, if you enter a function like =List.map=,
+it evaluates this expression and returns its type. You can even guess the name
+of a function if you do not remember what it is called. If you are wrong, you
+will just get an undefined-variable message. Finally, using features just
+beyond what we will study, you can get the REPL to print out all the bindings
+provided by a structure. Just do this for example:
+
+#+BEGIN_SRC sml
+  structure X = List; (* List is the structure we want to know about *)
+  structure X : LIST  (* This is what the REPL gives back *)
+  signature X = LIST; (* Write LIST because that is what follows the : on the *)
+                      (* previous line *)
+#+END_SRC
+
+Because looking things up in the REPL is so convenient, some REPLs for other
+languages have gone further and provided special commands for printing the
+documentation associated with functions or libraries.
+
 * Footnotes
 
 [fn:1] As a matter of jargon you do not need to know, the terms “each-of
@@ -2034,3 +3095,7 @@ example.
 
 [fn:6] As a technicality, =x= must be some variable not already defined in the
 outer environment and used by one of the expressions in the function.
+
+[fn:7] It would be better to make this function tail-recursive using an
+accumulator.
+
