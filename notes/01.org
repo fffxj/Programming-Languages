@@ -3613,6 +3613,742 @@ the module we do not /know/ they look identical. Indeed,
 since =Rational3.toString= expects an =int*int= but =Rational2.make_frac(2,3))=
 returns a value made out of the =Rational2.Frac= constructor.
 
+** What is Type Inference?
+
+While we have been using ML type inference for a while now, we have not studied
+it carefully. We will first carefully define what type inference is and then
+see via several examples how ML type inference works.
+
+Java, C, and ML are all examples of /statically typed languages/, meaning every
+binding has a type that is determined “at compile-time,” i.e., before any part
+of the program is run. The type-checker is a compile-time procedure that either
+accepts or rejects a program. By contrast, Racket, Ruby, and Python are
+/dynamically typed languages/, meaning the type of a binding is not determined
+ahead of time and computations like binding =42= to =x= and then treating =x=
+as a string result in run-time errors. After we do some programming with
+Racket, we will compare the advantages and disadvantages of static versus
+dynamic typing as a significant course topic.
+
+Unlike Java and C, ML is implicitly typed, meaning programmers rarely need to
+write down the types of bindings. This is often convenient (though some
+disagree as to whether it makes code easier or harder to read), but in no way
+changes the fact that ML is statically typed. Rather, the type-checker has to
+be more sophisticated because it must infer (i.e., figure out) what the type
+annotations “would have been” had programmers written all of them. In
+principle, type inference and type checking could be separate steps (the
+inferencer could do its part and the checker could see if the result should
+type-check), but in practice they are often merged into “the type-checker.”
+Note that a correct type-inferencer must find a solution to what all the types
+should be whenever such a solution exists, else it must reject the program.
+
+Whether type inference for a particular programming language is easy,
+difficult, or impossible is often not obvious. It is not proportional to how
+permissive the type system is. For example, the “extreme” type systems that
+“accept everything” and “accept nothing” are both very easy to do inference
+for. When we say type inference may be impossible, we mean this in the
+technical sense of undecidability, like the famous halting problem. We mean
+there are type systems for which no computer program can implement type
+inference such that (1) the inference process always terminates, (2) the
+inference process always succeeds if inference is possible, and (3) the
+inference process always fails if inference is not possible.
+
+Fortunately, ML was rather cleverly designed so that type inference can be
+performed by a fairly straight-forward and elegant algorithm. While there are
+programs for which inference is intractably slow, programs people write in
+practice never cause such behavior. We will demonstrate key aspects of the
+algorithm for ML type inference with a few examples. This will give you a sense
+that type inference is not “magic.” In order to move on to other course topics,
+we will not describe the full algorithm or write code to implement it.
+
+ML type inference ends up intertwined with parametric polymorphism — when the
+inferencer determines a function’s argument or result “could be anything” the
+resulting type uses =’a=, =’b=, etc. But type inference and polymorphism are
+entirely separate concepts: a language could have one or the other. For
+example, Java has generics but no inference for method argument/result types.
+
+** Overview of ML Type Inference
+
+Here is an overview of how ML type inference works (more examples to follow):
+
++ It determines the types of bindings in order, using the types of earlier
+  bindings to infer the types of later ones. This is why you cannot use later
+  bindings in a file. (When you need to, you use mutual recursion and type
+  inference determines the types of all the mutually recursive bindings
+  together. Mutual recursion is covered later in this unit.)
+
++ For each =val= or =fun= binding, it analyzes the binding to determine
+  necessary facts about its type. For example, if we see the expression =x+1=,
+  we conclude that =x= must have type =int=. We gather similar facts for
+  function calls, pattern-matches, etc.
+
++ Afterward, use type variables (e.g., =’a=) for any unconstrained types in
+  function arguments or results.
+
++ (Enforce the value restriction — only variables and values can have
+  polymorphic types, as discussed later.)
+
+The amazing fact about the ML type system is that “going in order” this way
+never causes us to reject a program that could type-check nor do we ever accept
+a program we should not. So explicit type annotations really are optional
+unless you use features like =#1=. (The problem with =#1= is that it does not
+give enough information for type inference to know what other fields the
+tuple/record should have, and the ML type system requires knowing the exact
+number of fields and all the fields’ names.)
+
+Here is an initial, very simple example:
+
+#+BEGIN_SRC sml
+  val x = 42
+  fun f (y,z,w) = if y then z+x else 0
+#+END_SRC
+
+Type inference first gives =x= type =int= since =42= has type =int=. Then it
+moves on to infer the type for =f=. Next we will study, via other examples, a
+more step-by-step procedure, but here let us just list the key facts:
+
++ =y= must have type =bool= because we test it in a conditional.
+
++ =z= must have type =int= because we add it to something we already determined
+  has type int.
+
++ =w= can have any type because it is never used.
+
++ =f= must return an =int= because its body is a conditional where both
+  branches return an =int=. (If they disagreed, type-checking would fail.)
+
+So the type of =f= must be =bool * int * ’a -> int=.
+
+** More Thorough Examples of ML Type Inference
+
+We will now work through a few examples step-by-step, generating all the facts
+that the type-inference algorithm needs. Note that humans doing type inference
+“in their head” often take shortcuts just like humans doing arithmetic in their
+head, but the point is there is a general algorithm that methodically goes
+through the code gathering constraints and putting them together to get the
+answer.
+
+As a first example, consider inferring the type for this function:
+
+#+BEGIN_SRC sml
+  fun f x =
+    let val (y,z) = x in
+        (abs y) + z
+    end
+#+END_SRC
+
+Here is how we can infer the type:
+
++ Looking at the first line, =f= must have type =T1->T2= for some types =T1=
+  and =T2= and in the function body =f= has this type and =x= has type =T1=.
+
++ Looking at the val-binding, =x= must be a pair type (else the pattern-match
+  makes no sense), so in fact =T1=T3*T4= for some =T3= and =T4=, and =y= has
+  type =T3= and =z= has type =T4=.
+
++ Looking at the addition expression, we know from the context that =abs= has
+  type =int->int=, so =y= having type =T3= means =T3=int=. Similarly, since
+  =abs y= has type =int=, the other argument to =+= must have type =int=, so
+  =z= having type =T4= means =T4=int=.
+
++ Since the type of the addition expression is =int=, the type of the
+  let-expression is =int=. And since the type of the let-expression is =int=,
+  the return type of =f= is =int=, i.e., =T2=int=.
+
+Putting all these constraints together, =T1=int*int= (since =T1=T3*T4=) and
+=T2=int=, so =f= has type =int*int->int=. 
+
+Next example:
+
+#+BEGIN_SRC sml
+  fun sum xs =
+    case xs of
+        [] => 0
+      | x::xs’ => x + (sum xs’)
+#+END_SRC
+
++ From the first line, there exists types =T1= and =T2= such that =sum= has
+  type =T1->T2= and =xs= has type =T1=.
+
++ Looking at the case-expression, =xs= must have a type that is compatible with
+  all of the patterns. Looking at the patterns, both of them match any list,
+  since they are built from list constructors (in the =x::xs’= case the
+  subpatterns match anything of any type). So since =xs= has type =T1=, in fact
+  =T1=T3 list= from some type =T3=.
+
++ Looking at the right-hand sides of the case branches, we know they must have
+  the same type as each other and this type is =T2=. Since 0 has type =int=,
+  =T2=int=.
+
++ Looking at the second case branch, we type-check it in a context where =x=
+  and =xs’= are available. Since we are matching the pattern =x::xs’= against a
+  =T3 list=, it must be that =x= has type =T3= and =xs’= has type =T3 list=.
+
++ Now looking at the right-hand side, we add =x=, so in fact =T3=int=.
+  Moreover, the recursive call type-checks because =xs’= has type =T3 list= and
+  =T3 list=T1= and =sum= has type =T1->T2=. Finally, since =T2=int=, adding
+  =sum xs’= type-checks.
+
+Putting everything together, we get =sum= has type int =list -> int=.
+
+Notice that before we got to =sum xs’= we had already inferred everything, but
+we still have to check that types are used consistently and reject otherwise.
+For example, if we had written =sum x=, that cannot type-check — it is
+inconsistent with previous facts. Let us see this more thoroughly to see what
+happens:
+
+#+BEGIN_SRC sml
+  fun broken_sum xs =
+    case xs of
+        [] => 0
+      | x::xs’ => x + (broken_sum x)
+#+END_SRC
+
++ Type inference for =broken_sum= proceeds largely the same as for =sum=. The
+  first four bullets from the previous example all apply, giving =broken_sum=
+  type =T3 list ->int=, =xs= type =T3 list=, =x= type =T3=, and =xs’= type =T3
+  list=. Moreover, =T3=int=.
+
++ We depart from the correct =sum= implementation with the call =broken_sum x=.
+  For this call to type-check, =x= must have the same type as =broken_sum= ’s
+  parameter, or in other words, T1=T3. However, we know that T1=T3 list, so
+  this new constraint =T1=T3= actually generates a contradiction: =T3=T3 list=.
+  If we want to be more concrete, we can use our knowledge that =T3=int= to
+  rewrite this as =int=int list=. Looking at the definition of =broken_sum= it
+  should be obvious that this is exactly the problem: we tried to use =x= as an
+  =int= and as an =int list=.
+
+When your ML program does not type-check, the type-checker reports the
+expression where it discovered a contradiction and what types were involved in
+that contradiction. While sometimes this information is helpful, other times
+the actual problem is with a different expression, but the type-checker did not
+reach a contradiction until later.
+
+** Examples with Polymorphic Types
+
+Our remaining examples will infer polymorphic types. All we do is follow the
+same procedure we did above, but when we are done, we will have some parts of
+the function’s type that are still unconstrained. For each =Ti= that “can be
+anything” we use a type variable (=’a=, =’b=, etc.).
+
+#+BEGIN_SRC sml
+  fun length xs =
+    case xs of
+        [] => 0
+      | x::xs’ => 1 + (length xs’)
+#+END_SRC
+
+Type inference proceeds much like with =sum=. We end up determining:
+
++ length has type =T1->T2=.
+
++ =xs= has type =T1=.
+
++ =T1=T3 list= (due to the pattern-match)
+
++ =T2=int= because =0= can be the result of a call to length.
+
++ =x= has type =T3= and =xs’= has type =T3 list=.
+
++ The recursive call length =xs’= type-checks because =xs’= has type =T3 list=,
+  which is =T1=, the argument type of length. And we can add the result because
+  =T2=int=.
+
+So we have all the same constraints as for =sum=, except we do not have
+=T3=int=. In fact, =T3= can be anything and =length= will type-check. So type
+inference recognizes that when it is all done, it has length with type =T3 list
+-> int= and =T3= can be anything. So we end up with the type =’a list -> int=,
+as expected. Again the rule is simple: for each =Ti= in the final result that
+cannot be constrained, use a type variable.
+
+
+A second example:
+
+#+BEGIN_SRC sml
+  fun compose (f,g) = fn x => f (g x)
+#+END_SRC
+
++ Since the argument to compose must be a pair (from the pattern used for its
+  argument), compose has type =T1*T2->T3=, =f= has type =T1= and =g= has type
+  =T2=.
+
++ Since compose returns a function, =T3= is some =T4->T5= where in that
+  function’s body, =x= has type =T4=.
+
++ So =g= must have type =T4->T6= for some =T6=, i.e., =T2=T4->T6=.
+
++ And =f= must have type =T6->T7= for some =T7=, i.e., =T1=T6->T7=.
+
++ But the result of =f= is the result of the function returned by =compose=, so
+  =T7=T5= and so =T1=T6->T5=.
+
+Putting together =T1=T6->T5= and =T2=T4->T6= and =T3=T4->T5= we have a type for
+=compose= of =(T6->T5)*(T4->T6) -> (T4->T5)=. There is nothing else to
+constrain the types =T4=, =T5=, and =T6=, so we replace them consistently to
+end up with =(’a->’b)*(’c->’a) -> (’c->’b)= as expected (and the last set of
+parentheses are optional, but that is just syntax).
+
+
+Here is a simpler example that also has multiple type variables:
+
+#+BEGIN_SRC sml
+  fun f (x,y,z) =
+    if true
+    then (x,y,z)
+    else (y,x,z)
+#+END_SRC
+
++ The first line requires that =f= has type =T1*T2*T3 -> T4=, =x= has type
+  =T1=, =y= has type =T2=, and =z= has type =T3=.
+
++ The two branches of the conditional must have the same type and this is the
+  return type of the function =T4=. Therefore, =T4=T1*T2*T3= and =T4=T2*T1*T3=.
+  This constraint requires =T1=T2=.
+
+Putting together these constraints (and no others), =f= will type-check with
+type =T1*T1*T3 -> T1*T1*T3= for any types =T1= and =T3=. So replacing each type
+consistently with a type variable, we get =’a*’a*’b -> ’a*’a*’b=, which is
+correct: =x= and =y= must have the same type, but =z= can (but need not) have a
+different type. Notice that the type-checker always requires both branches of a
+conditional to type-check with the same type, even though here we know which
+branch will be evaluated.
+
+** Optional: The Value Restriction
+
+As described so far in this unit, the ML type system is unsound, meaning that
+it would accept programs that when run could have values of the wrong types,
+such as putting an =int= where we expect a =string=. The problem results from a
+combination of polymorphic types and mutable references, and the fix is a
+special restriction to the type system called the /value restriction/.
+
+This is an example program that demonstrates the problem:
+
+#+BEGIN_SRC sml
+  val r = ref NONE       (* ’a option ref *)
+  val _ = r := SOME "hi" (* instantiate ’a with string *)
+  val i = 1 + valOf(!r)  (* instantiate ’a with int *)
+#+END_SRC
+
+Straightforward use of the rules for type checking/inference would accept this
+program even though we should not – we end up trying to add =1= to "hi". Yet
+everything seems to type-check given the types for the functions/operators /ref
+(’a -> ’a ref)=/, /:= (’a ref * ’a -> unit)/, and /! (’a ref -> ’a)/.
+
+To restore soundness, we need a stricter type system that does not let this
+program type-check. The choice ML made is to prevent the first line from having
+a polymorphic type. Therefore, the second and third lines will not type-check
+because they will not be able to instantiate an =’a= with =string= or =int=. In
+general, *ML will give a variable in a val-binding a polymorphic type only if
+the expression in the val-binding is a value or a variable*. This is called the
+/value restriction/. In our example, =ref NONE= is a call to the function
+=ref=. Function calls are not variables or values. So we get a warning and =r=
+is given a type =?X1 option ref= where =?X1= is a “dummy type,” not a type
+variable. This makes =r= not useful and the later lines do not type-check. It
+is not at all obvious that this restriction suffices to make the type system
+sound, but in fact it is sufficient.
+
+For =r= above, we can use the expression =ref NONE=, but we have to use a type
+annotation to give =r= a non-polymorphic type, such as =int option ref=.
+Whatever we pick, one of the next two lines will not type-check.
+
+As we saw previously when studying partial application, the value restriction
+is occasionally burdensome even when it is not a problem because we are not
+using mutation. We saw that this binding falls victim to the value-restriction
+and is not made polymorphic:
+
+#+BEGIN_SRC sml
+  val pairWithOne = List.map (fn x => (x,1))
+#+END_SRC
+
+We saw multiple workarounds. One is to use a function binding, even though
+without the value restriction it would be unnecessary function wrapping. This
+function has the desired type =’a list -> (’a * int) list=:
+
+#+BEGIN_SRC sml
+  fun pairWithOne xs = List.map (fn x => (x,1)) xs
+#+END_SRC
+
+One might wonder why we cannot enforce the value restriction only for
+references (where we need it) and not for immutable types like lists. The
+answer is the ML type-checker cannot always know which types are really
+references and which are not. In the code below, we need to enforce the value
+restriction on the last line, because =’a foo= and =’a ref= are the same type.
+
+#+BEGIN_SRC sml
+  type ’a foo = ’a ref
+  val f : ’a -> ’a foo = ref
+  val r = f NONE
+#+END_SRC
+
+Because of ML’s module system, the type-checker does not always know the
+definition of type synonyms (recall this is a good thing). So to be safe, it
+enforces the value restriction for all types.
+
+** Optional: Some Things that Make Type Inference More Difficult
+
+Now that we have seen how ML type inference works, we can make two interesting
+observations:
+
++ Inference would be more difficult if ML had subtyping (e.g., if every triple
+  could also be a pair) because we would not be able to conclude things like,
+  “T3=T1*T2” since the equals would be overly restrictive. We would instead
+  need constraints indicating that =T3= is a tuple with _at least_ two fields.
+  Depending on various details, this can be done, but type inference is more
+  difficult and the results are more difficult to understand.
+
++ Inference would be more difficult if ML did not have parametric polymorphism
+  since we would have to pick some type for functions like =length= and
+  =compose= and that could depend on how they are used.
+
+** Mutual Recursion
+
+We have seen many examples of recursive functions and many examples of
+functions using other functions as helper functions, but what if we need a
+function =f= to call =g= and =g= to call =f=? That can certainly be useful, but
+ML’s rule that bindings can only use earlier bindings makes it more difficult —
+which should come first, =f= or =g=?
+
+It turns out ML has special support for mutual recursion using the keyword
+=and= and putting the mutually recursive functions next to each other.
+Similarly, we can have mutually recursive =datatype= bindings. After showing
+these new constructs, we will show that you can actually work around a lack of
+support for mutually recursive functions by using higher-order functions, which
+is a useful trick in general and in particular in ML if you do not want your
+mutually recursive functions next to each other.
+
+Our first example uses mutual recursion to process an =int list= and return a
+=bool=. It returns true if the list strictly alternates between =1= and =2= and
+ends with a =2=. Of course there are many ways to implement such a function,
+but our approach does a nice job of having for each “state” (such as “a 1 must
+come next” or “a 2 must come next”) a function. In general, many problems in
+computer science can be modeled by such /finite state machines/, and mutually
+recursive functions, one for each state, are an elegant way to implement finite
+state machines.
+
+#+BEGIN_SRC sml
+  fun match xs =
+    let fun s_need_one xs =
+          case xs of
+              [] => true
+            | 1::xs’ => s_need_two xs’
+            | _ => false
+        and s_need_two xs =
+            case xs of
+                [] => false
+              | 2::xs’ => s_need_one xs’
+              | _ => false
+    in
+        s_need_one xs
+    end
+#+END_SRC
+
+(The code uses integer constants in patterns, which is an occasionally
+convenient ML feature, but not essential to the example.)
+
+In terms of syntax, we define mutually recursive functions by simply replacing
+the keyword =fun= for all functions except the first with =and=. The
+type-checker will type-check all the functions (two in the example above)
+together, allowing calls among them regardless of order.
+
+
+Here is a second (silly) example that also uses two mutually recursive
+=datatype= bindings. The definition of types =t1= and =t2= refer to each other,
+which is allowed by using =and= in place of =datatype= for the second one. This
+defines two new datatypes, =t1= and =t2=.
+
+#+BEGIN_SRC sml
+  datatype t1 = Foo of int | Bar of t2
+       and t2 = Baz of string | Quux of t1
+
+  fun no_zeros_or_empty_strings_t1 x =
+    case x of
+        Foo i => i <> 0
+      | Bar y => no_zeros_or_empty_strings_t2 y
+  and no_zeros_or_empty_strings_t2 x =
+      case x of
+          Baz s => size s > 0
+        | Quux y => no_zeros_or_empty_strings_t1 y
+#+END_SRC
+
+Now suppose we wanted to implement the “no zeros or empty strings”
+functionality of the code above but for some reason we did not want to place
+the functions next to each other or we were in a language with no support for
+mutually recursive functions. We can write almost the same code by having the
+“later” function pass itself to a version of the “earlier” function that takes
+a function as an argument:
+
+#+BEGIN_SRC sml
+  fun no_zeros_or_empty_strings_t1 (f,x) =
+    case x of
+        Foo i => i <> 0
+      | Bar y => f y
+
+  fun no_zeros_or_empty_string_t2 x =
+    case x of
+        Baz s => size s > 0
+      | Quux y => no_zeros_or_empty_strings_t1(no_zeros_or_empty_string_t2,y)
+#+END_SRC
+
+This is yet-another powerful idiom allowed by functions taking functions.
+
+** Motivating and Defining Equivalence
+
+The idea that one piece of code is “equivalent” to another piece of code is
+fundamental to programming and computer science. You are informally thinking
+about equivalence every time you simplify some code or say, “here’s another way
+to do the same thing.” This kind of reasoning comes up in several common
+scenarios:
+
++ Code maintenance: Can you simplify, clean up, or reorganize code without
+  changing how the rest of the program behaves?
+
++ Backward compatibility: Can you add new features without changing how any of
+  the existing features work?
+
++ Optimization: Can you replace code with a faster or more space-efficient
+  implementation?
+
++ Abstraction: Can an external client tell if I make this change to my code?
+
+Also notice that our use of restrictive signatures in the previous lecture was
+largely about equivalence: by using a stricter interface, we make more
+different implementations equivalent because clients cannot tell the
+difference.
+
+We want a precise definition of equivalence so that we can decide whether
+certain forms of code maintenance or different implementations of signatures
+are actually okay. We do not want the definition to be so strict that we cannot
+make changes to improve code, but we do not want the definition to be so
+lenient that replacing one function with an “equivalent” one can lead to our
+program producing a different answer. Hopefully, studying the concepts and
+theory of equivalence will improve the way you look at software written in any
+language.
+
+There are many different possible definitions that resolve this strict/lenient
+tension slightly differently. We will focus on one that is useful and commonly
+assumed by people who design and implement programming languages. We will also
+simplify the discussion by assuming that we have two implementations of a
+function and we want to know if they are equivalent.
+
+The intuition behind our definition is as follows:
+
++ A function =f= is equivalent to a function =g= (or similarly for other pieces
+  of code) if they produce the _same answer_ and have the _same side-effects_
+  _no matter where they are called in any program with any arguments_.
+
++ Equivalence does _not_ require the _same running time_, the _same use of
+  internal data structures_, the _same helper functions_, etc. All these things
+  are considered “unobservable”, i.e., implementation details that do not
+  affect equivalence.
+
+As an example, consider two very different ways of sorting a list. Provided
+they both produce the same final answer for all inputs, they can still be
+equivalent no matter how they worked internally or whether one was faster.
+However, if they behave differently for some lists, perhaps for lists that have
+repeated elements, then they would not be equivalent.
+
+However, the discussion above was simplified by implicitly assuming the
+functions always return and have no other effect besides producing their
+answer. To be more precise, we need that the two functions when given the same
+argument in the same environment:
+
+1. Produce the same result (if they produce a result)
+
+2. Have the same (non)termination behavior; i.e., if one runs forever the other
+   must run forever 
+
+3. Mutate the same (visible-to-clients) memory in the same way.
+
+4. Do the same input/output
+
+5. Raise the same exceptions
+
+These requirements are all important for knowing that if we have two equivalent
+functions, we could replace one with the other and no use anywhere in the
+program will behave differently.
+
+** Another Benefit of Side-Effect-Free Programming
+
+One easy way to make sure two functions have the same side effects (mutating
+references, doing input/output, etc.) is to have no side effects at all. This
+is exactly what functional languages like ML encourage. Yes, in ML you could
+have a function body mutate some global reference or something, but it is
+generally bad style. Other functional languages are pure functional languages
+meaning there really is no way to do mutation inside (most) functions.
+
+If you “stay functional” by not doing mutation, printing, etc. in function
+bodies as a matter of policy, then callers can assume lots of equivalences they
+cannot otherwise. For example, can we replace =(f x)+(f x)= with =(f x)*2=? In
+general, that can be a wrong thing to do since calling =f= might update some
+counter or print something. In ML, that’s also possible, but far less likely as
+a matter of style, so we tend to have more things be equivalent. In a purely
+functional language, we are guaranteed the replacement does not change
+anything. The general point is that mutation really gets in your way when you
+try to decide if two pieces of code are equivalent — it is a great reason to
+avoid mutation.
+
+In addition to being able to remove repeated computations (like =(f x)= above)
+when maintaining side-effect-free programs, we can also reorder expressions
+much more freely. For example, in Java, C, etc.:
+
+#+BEGIN_SRC c
+  int a = f(x);
+  int b = g(y);
+  return b - a;
+#+END_SRC
+
+might produce a different result from:
+
+#+BEGIN_SRC c
+  return g(y) - f(x);
+#+END_SRC
+
+since =f= and =g= can get called in a different order. Again, this is possible
+in ML too, but if we avoid side-effects, it is much less likely to matter. (We
+might still have to worry about a different exception getting thrown and other
+details, however.)
+
+** Standard Equivalences
+
+Equivalence is subtle, especially when you are trying to decide if two
+functions are equivalent without knowing all the places they may be called. Yet
+this is common, such as when you are writing a library that unknown clients may
+use. We now consider several situations where equivalence is guaranteed in any
+situation, so these are good rules of thumb and are good reminders of how
+functions and closures work.
+
+First, recall the various forms of syntactic sugar we have learned. We can
+always use or not use _syntactic sugar_ in a function body and get an equivalent
+function. If we couldn’t, then the construct we are using is not actually
+syntactic sugar. For example, these definitions of =f= are equivalent regardless
+of what =g= is bound to:
+
+#+BEGIN_SRC sml
+  fun f x =
+    if x
+    then g x
+    else false
+
+  fun f x =
+    x andalso g x
+#+END_SRC
+
+Notice though, that we could not necessarily replace =x andalso g x= with =if g
+x then x else false if g= could have side effects or not terminate.
+
+
+Second, we can _change the name of a local variable (or function parameter)_
+provided we change all uses of it consistently. For example, these two
+definitions of =f= are equivalent:
+
+#+BEGIN_SRC sml
+  val y = 14
+  fun f x = x+y+x
+
+  val v = 14
+  fun f z = z+y+z
+#+END_SRC
+
+But there is one rule: in choosing a new variable name, you cannot choose a
+variable that the function body is already using to refer to something else.
+For example, if we try to replace =x= with =y=, we get =fun y = y+y+y=, which
+is not the same as the function we started with. A previously-unused variable
+is never a problem.
+
+
+Third, we can use or not use a _helper function_. For example, these two
+definitions of =g= are equivalent:
+
+#+BEGIN_SRC sml
+  val y = 14
+  fun g z = (z+y+z)+z
+
+  val y = 14
+  fun f x = x+y+x
+  fun g z = (f z)+z
+#+END_SRC
+
+Again, we must take care not to change the meaning of a variable due to =f= and
+=g= having potentially different environments. For example, here the
+definitions of =g= are _not_ equivalent:
+
+#+BEGIN_SRC sml
+  val y = 14
+  val y = 7
+  fun g z = (z+y+z)+z
+
+  val y = 14
+  fun f x = x+y+x
+  val y = 7
+  fun g z = (f z)+z
+#+END_SRC
+
+
+Fourth, as we have explained before with anonymous functions, unnecessary
+function wrapping is poor style because there is a simpler equivalent way. For
+example, =fun g y = f y= and =val g = f= are always equivalent. Yet once again,
+there is a subtle complication. While this works when we have a variable like
+=f= bound to the function we are calling, in the more general case we might
+have an expression that evaluates to a function that we then call. Are =fun g y
+= e y= and =val g = e= always the same for any expression =e=? No.
+
+As a silly example, consider =fun h() (print "hi" ; fn x => x+x)= and =e= is
+=h()=. Then =fun g y = (h()) y= is a function that prints every time it is
+called. But =val g = h()= is a function that does not print — the program will
+print "hi" once when creating the binding for =g=. This should not be
+mysterious: we know that val-bindings evaluate their right-hand sides
+“immediately” but function bodies are not evaluated until they are called.
+
+A less silly example might be if =h= might raise an exception rather than
+returning a function.
+
+
+Fifth, it is almost the case that =let val p = e1 in e2 end= can be sugar for
+=(fn p => e2) e1=. After all, for any expressions =e1= and =e2= and pattern
+=p=, both pieces of code:
+
++ Evaluate =e1= to a value
+
++ Match the value against the pattern =p=
+
++ If it matches, evaluate =e2= to a value in the environment extended by the
+  pattern match
+
++ Return the result of evaluating =e2=
+
+Since the two pieces of code “do” the exact same thing, they must be
+equivalent. In Racket, this will be the case (with different syntax). In ML,
+the only difference is the type-checker: The variables in =p= are allowed to
+have polymorphic types in the let-version, but not in the anonymous-function
+version.
+
+For example, consider /let val x = (fn y => y) in (x 0, x true) end/. This
+silly code type-checks and returns =(0,true)= because =x= has type =’a->’a=.
+But /(fn x => (x 0, x true)) (fn y => y)/ does not type-check because there is
+no non-polymorphic type we can give to =x= and function-arguments cannot have
+polymorphic types. This is just how type-inference works in ML.
+
+** Revisiting our Definition of Equivalence
+
+By design, our definition of equivalence ignores how much time or space a
+function takes to evaluate. So two functions that always returned the same
+answer could be equivalent even if one took a nanosecond and another took a
+million years. In some sense, this is a good thing since the definition would
+allow us to replace the million-year version with the nanosecond version.
+
+But clearly other definitions matter too. Courses in data structures and
+algorithms study asymptotic /complexity precisely/ so that they can distinguish
+some algorithms as “better” (which clearly implies some “difference”) even
+though the better algorithms are producing the same answers. Moreover,
+asymptotic complexity, by design, ignores “constant-factor overheads” that
+might matter in some programs so once again this stricter definition of
+equivalence may be too lenient: we might actually want to know that two
+implementations take “about the same amount of time.”
+
+None of these definitions are superior. All of them are valuable perspectives
+computer scientists use all the time. _Observable behavior (our definition)_,
+_asymptotic complexity_, and _actual performance_ are all intellectual tools
+that are used almost every day by someone working on software.
+
 * Footnotes
 
 [fn:1] As a matter of jargon you do not need to know, the terms “each-of
