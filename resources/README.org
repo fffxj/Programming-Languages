@@ -1,0 +1,8 @@
+
++ Coursera: [[https://www.coursera.org/learn/programming-languages/][Programming Languages]]
+  - [[https://www.coursera.org/learn/programming-languages/][Part A, (in SML)]]
+  - [[https://www.coursera.org/learn/programming-languages-part-b][Part B, (in Racket)]]
+  - [[https://www.coursera.org/learn/programming-languages-part-c][Part C, (in Ruby)]]
+
++ Washington: [[https://courses.cs.washington.edu/courses/cse341/][CSE341]]
+  - [[https://courses.cs.washington.edu/courses/cse341/16sp/][cse341/16sp]]
