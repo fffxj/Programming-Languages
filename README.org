@@ -1,14 +1,8 @@
 #+TITLE: Programming Languages
 
-| Section | Lang   | Status | Score   | Point | Date             |
-|---------+--------+--------+---------+-------+------------------|
-|       0 | SML    | PASS   | 100/100 |       | [2016-07-24 Sun] |
-|       1 | SML    | PAWC   | 100/100 | 55/55 | [2016-08-01 Mon] |
-|       2 | SML    | PASS   | 97/100  | 54/55 | [2016-08-11 Thu] |
-|       3 | SML    | PASS   | 85/100  | 59/60 | [2016-08-21 Sun] |
-|       4 | SML    | PASS   | 100/100 |       | [2016-08-24 Wed] |
-|       5 | Racket | PAWC   | 100/100 | 49/50 | [2016-09-10 Sat] |
-|       6 | Racket | PASS   | 100/100 | 70/70 | [2016-09-17 Sat] |
-|       7 | Racket | PASS   | 100/100 |       | [2016-09-22 Thu] |
-|       8 | Ruby   | PASS   | 100/100 | 40/40 | [2016-10-08 Sat] |
-|       9 | Ruby   | PASS   | 100/100 | 45/45 | [2016-10-14 Fri] |
+Programming assignments for Programming Languages course on Coursera provided
+by University of Washington.
+
++ [[https://www.coursera.org/learn/programming-languages/][Programming Languages Part A, (in SML)]]
++ [[https://www.coursera.org/learn/programming-languages-part-b][Programming Languages Part B, (in Racket)]]
++ [[https://www.coursera.org/learn/programming-languages-part-c][Programming Languages Part C, (in Ruby)]]
